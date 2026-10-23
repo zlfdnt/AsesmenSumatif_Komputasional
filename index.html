@@ -797,7 +797,7 @@ async function dash(refresh){
       if(!r||r.ok===false||!Array.isArray(r.hasil))throw new Error((r&&r.err)||"server tidak mengembalikan data (aksi 'data' belum didukung / kata sandi ditolak)");
       G.d={hasil:r.hasil,logs:Array.isArray(r.logs)?r.logs:[]};
     }catch(e){G.d=null;const msg=e&&e.name=="AbortError"?"waktu tunggu habis (server lambat atau sinyal lemah)":String((e&&e.message)||e);
-      $("#app").innerHTML=`<div class="card"><p class="warn">⚠️ Gagal memuat data.</p><p><b>Penyebab:</b> ${esc(msg)}</p><ul><li>Pastikan <b>Code.gs terbaru</b> sudah ditempel, lalu <b>Deploy → Manage deployments → Edit → New version</b> (akses: <b>Anyone</b>).</li><li>Lalu tekan <b>Coba lagi</b>.</li></ul><button class="btn o" onclick="dash(1)">🔄 Coba lagi</button> <button class="btn r" onclick="logout()">Keluar</button></div>`;return}}
+      $("#app").innerHTML=`<div class="card"><p class="warn">⚠️ Gagal memuat data.</p><p><b>Penyebab:</b> ${esc(msg)}</p><ul><li>Pastikan <b>Code.gs terbaru</b> sudah ditempel, lalu <b>Deploy → Manage deployments → Edit → New version</b> (akses: <b>Anyone</b>).</li><li>Di editor Apps Script, pilih fungsi <b>setup</b> → <b>Run</b> → izinkan akses (sekali saja), lalu tekan <b>Coba lagi</b>.</li></ul><button class="btn o" onclick="dash(1)">🔄 Coba lagi</button> <button class="btn r" onclick="logout()">Keluar</button></div>`;return}}
   const D=buildD(),K=G.kelas,stuK=D.stu.filter(s=>s.kelas==K),attK=D.att.filter(a=>a.kelas==K);G.stu=stuK;
   const sub=stuK.filter(s=>s.att.length),sk=sub.map(s=>s.att[0].skor);
   let body="";
