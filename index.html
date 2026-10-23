@@ -226,21 +226,23 @@ const hk=()=>nk(U.nama)+"|"+U.kelas;
 const getHist=()=>{try{return(JSON.parse(localStorage.getItem("dk_h")||"{}"))[hk()]||[]}catch(e){return[]}};
 const addHist=e=>{try{const o=JSON.parse(localStorage.getItem("dk_h")||"{}");(o[hk()]=o[hk()]||[]).push(e);localStorage.setItem("dk_h",JSON.stringify(o))}catch(x){}};
 async function refreshHist(){
-  if(!U||U.role!="siswa")return;let srv=[],ok=false;
+  if(!U||U.role!="siswa")return;let srv=[],ok=false,refl=[];
   try{const r=await api({action:"riwayat",nama:U.nama,kelas:U.kelas});
-    if(r&&r.ok&&Array.isArray(r.list)){srv=r.list;ok=true;
+    if(r&&r.ok&&Array.isArray(r.list)){srv=r.list;ok=true;refl=(r.refl||[]).map(Number);
       if(r.nama&&nk(r.nama)==nk(U.nama)&&r.nama!==U.nama){U.nama=r.nama;sessionStorage.setItem("u",JSON.stringify(U))}
       if(Array.isArray(r.materi)){r.materi.forEach(t=>{const i=M.findIndex(m=>m.t==t);if(i>=0)done.add(i)});saveDone()}
       if(r.lab){Object.entries(r.lab).forEach(([lv,p])=>{const i=+String(lv).replace(/\D/g,"")-1;if(i>=0&&i<LB.best.length&&p>LB.best[i])LB.best[i]=+p});sessionStorage.setItem("lab",JSON.stringify(LB.best))}}
   }catch(e){}
   const pend=new Set(ls("dk_pending").map(x=>x.id)),ids=new Set(srv.map(x=>x.id));
+  const lo={};getHist().forEach(x=>lo[x.id]=x);
   HIST=[...srv,...getHist().filter(x=>!ids.has(x.id)&&(!ok||pend.has(x.id)))];
+  HIST.forEach((x,i)=>{x.rf=!!(x.rf||(lo[x.id]&&lo[x.id].rf)||refl.includes(i+1));if(!x.jw&&lo[x.id]){x.jw=lo[x.id].jw;x.dur=x.dur||lo[x.id].dur}});
   if(ok){try{const o=JSON.parse(localStorage.getItem("dk_h")||"{}");o[hk()]=HIST;localStorage.setItem("dk_h",JSON.stringify(o))}catch(e){}}
 }
 function histInfo(){const el=$("#hist");if(!el)return;const hs=HIST||getHist();
-  el.innerHTML=hs.length?`<div class="ex">📊 Kamu sudah mengerjakan asesmen ini <b>${hs.length}×</b>. ⭐ Nilai utamamu (percobaan pertama): <b>${hs[0].skor}</b>. Mengerjakan lagi akan tercatat sebagai <b>percobaan ke-${hs.length+1}</b> dan <b>tidak mengubah nilai utama</b>.</div>`:`<div class="ex">⭐ Skor dari <b>percobaan pertama</b> menjadi nilai utamamu. Jika nanti mengulang, semua skor tetap tercatat, tetapi nilai utama tidak berubah.</div>`}
-function histCard(r){const hs=HIST||getHist();if(!hs.length)return"";const ke=r.ke||hs.length,u=hs[0];
-  return `<div class="card"><h2>📈 Riwayat Percobaan</h2>${ke>1?`<p class="ex">🔁 Ini <b>percobaan ke-${ke}</b>. Nilai utamamu tetap hasil <b>percobaan pertama: ${u.skor}</b>. Percobaan ulang tercatat sebagai latihan dan tidak mengubah nilai utama.</p>`:`<p class="ex">⭐ Ini percobaan pertamamu, jadi skor <b>${u.skor}</b> menjadi <b>nilai utama</b>. Kalau kamu mengulang nanti, nilai ini tidak akan berubah.</p>`}<div class="tbl"><table><tr><th>Percobaan</th><th>Skor</th><th>Keterangan</th></tr>${hs.map((x,i)=>`<tr><td>ke-${i+1}</td><td><b>${x.skor}</b></td><td>${i==0?"⭐ Nilai utama":"🔁 Latihan ulang"}${i+1==ke?" • percobaan ini":""}</td></tr>`).join("")}</table></div></div>`}
+  el.innerHTML=hs.length?`<div class="ex">📊 Kamu sudah mengerjakan asesmen ini <b>${hs.length}×</b>. ⭐ Nilai yang diambil adalah <b>percobaan pertama: ${hs[0].skor}</b>. Percobaan ke-${hs.length+1} dan seterusnya adalah <b>tempat latihan</b>: skornya tercatat tetapi <b>tidak mengubah nilai</b>.</div>`:`<div class="ex">⭐ Nilai yang diambil hanya dari <b>percobaan pertama</b>, jadi kerjakan dengan sungguh-sungguh. Percobaan berikutnya adalah <b>tempat latihan</b>: skornya tercatat, tetapi tidak mengubah nilai.</div>`}
+function histBanner(r){const hs=HIST||getHist(),ke=r.ke||1,u=hs[0];
+  return ke==1?`<div class="ex">⭐ Ini <b>percobaan pertamamu</b>, jadi skor <b>${r.skor}</b> adalah <b>nilai yang diambil</b>. Percobaan berikutnya adalah <b>tempat latihan</b> dan tidak mengubah nilai ini.</div>`:`<div class="ex">🔁 Ini <b>percobaan ke-${ke} (latihan)</b>. Nilai yang diambil tetap <b>percobaan pertama${u?": "+u.skor:""}</b>. Teruslah berlatih untuk memperdalam pemahamanmu!</div>`}
 let U=JSON.parse(sessionStorage.getItem("u")||"null");
 let done=new Set(JSON.parse(sessionStorage.getItem("done")||"[]"));
 const ls=(k,v)=>v===undefined?JSON.parse(localStorage.getItem(k)||"[]"):localStorage.setItem(k,JSON.stringify(v));
@@ -280,7 +282,7 @@ async function api(p){
     if(p.action==="submit"){const h=ls("dk_hasil");if(!h.some(r=>r[6]==p.id))h.push([nowStr(),p.nama,p.kelas,p.skor,p.durasi,p.jawaban,p.id,p.ke||""]);ls("dk_hasil",h);return{ok:true}}
     if(p.action==="riwayat"){const k=nk(p.nama),mine=ls("dk_hasil").filter(r=>nk(r[1])==k&&r[2]==p.kelas),lg=ls("dk_log").filter(r=>nk(r[1])==k&&r[2]==p.kelas),lab={};
       lg.filter(r=>r[3]=="Lab level selesai").forEach(r=>{const [lv,pt]=String(r[4]).split("|");lab[lv]=Math.max(lab[lv]||0,+pt||0)});
-      return{ok:true,nama:mine.length?mine[0][1]:undefined,list:mine.map(r=>({id:r[6],skor:+r[3],w:r[0]})),materi:[...new Set(lg.filter(r=>r[3]=="Materi selesai").map(r=>r[4]))],lab}}
+      return{ok:true,nama:mine.length?mine[0][1]:undefined,list:mine.map(r=>({id:r[6],skor:+r[3],w:r[0],dur:+r[4],jw:r[5]})),refl:lg.filter(r=>r[3]=="Refleksi").map(r=>+((String(r[4]).match(/^\[P(\d+)\]/)||[])[1])).filter(Boolean),materi:[...new Set(lg.filter(r=>r[3]=="Materi selesai").map(r=>r[4]))],lab}}
     if(p.action==="guru")return{ok:p.pass===DEMO_GURU_PASS};
     if(p.action==="data")return p.pass===DEMO_GURU_PASS?{ok:true,logs:ls("dk_log"),hasil:ls("dk_hasil")}:{ok:false};
   }
@@ -371,7 +373,7 @@ function home(){
   $("#app").innerHTML=head("",1,GOBOX)+`<div class="card" id="peta"><div class="bar"><h3>Peta Petualangan</h3><span class="kls">🎒 Kelas ${U.kelas}</span></div><p>Pelajari tiap misi, coba latihannya, lalu buktikan kemampuanmu di Asesmen Sumatif. Progres: <b>${done.size}/3</b> materi selesai.</p><div class="prog"><i style="width:${done.size/3*100}%"></i></div></div>
   <div class="grid">${M.map((m,i)=>`<div class="tile ${m.c}" onclick="materi(${i})"><div class="e">${m.e}</div><h3>${m.t}</h3><p>${done.has(i)?"✅ Selesai":m.intro}</p></div>`).join("")}
   <div class="tile t4" onclick="lab()"><div class="e">🧪</div><h3>Pseudocode Lab</h3><p>Susun instruksi, jalankan robot, kumpulkan poin!</p></div>
-  <div class="tile t5" onclick="intro()"><div class="e">🏆</div><h3>Asesmen Sumatif</h3><p>${Q.length} soal gaya TKA berbasis wacana.</p></div>${LR?`<div class="tile t2 pop" onclick="hasil(LR)"><div class="e">📊</div><h3>Hasil Terakhir</h3><p>Percobaan ke-${LR.ke||1} • skor ${LR.skor} • lihat pembahasan</p></div>`:`<div class="tile lock" onclick="kunci(this)"><div class="e">🔒</div><h3>Hasil Terakhir</h3><p>Terbuka setelah kamu menyelesaikan Asesmen Sumatif.</p></div>`}</div>`;
+  <div class="tile t5" onclick="intro()"><div class="e">🏆</div><h3>Asesmen Sumatif</h3><p>${Q.length} soal gaya TKA berbasis wacana.</p></div>${(HIST||getHist()).length?`<div class="tile t2 pop" onclick="hasilTerakhir()"><div class="e">📊</div><h3>Hasil Terakhir</h3><p>Nilai utama ${(HIST||getHist())[0].skor} • ${(HIST||getHist()).length} percobaan • grafik & pembahasan</p></div>`:`<div class="tile lock" onclick="kunci(this)"><div class="e">🔒</div><h3>Hasil Terakhir</h3><p>Terbuka setelah kamu menyelesaikan percobaan pertama Asesmen Sumatif.</p></div>`}</div>`;
 }
 function media(){log("Buka menu media","");$("#app").innerHTML=head()+`<div class="card"><h3>🌐 Media Pembelajaran</h3>${MEDIA.map(m=>`<p><a class="btn g" style="text-decoration:none;display:inline-block" target="_blank" rel="noopener" href="${m[1]}" onclick="log('Buka media','${m[0]}')">${m[0]}</a></p>`).join("")}</div>`}
 /* ===== DEMO CONTOH DATA ===== */
@@ -638,11 +640,11 @@ async function selesai(forced,why){
   const pts=A.ans.map((a,k)=>skorItem(k,a)),skor=Math.round(pts.reduce((x,y)=>x+y,0)/Q.length*100),dur=Math.round((Date.now()-A.t0)/1000);
   const base=HIST||getHist(),ke=base.length+1;
   const rec={id:"r"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),nama:U.nama,kelas:U.kelas,skor,durasi:dur,ke,jawaban:JSON.stringify({a:A.ans,p:pts,out:A.out,forced:!!forced,why,ke})};
-  const he={id:rec.id,skor,w:nowStr()};addHist(he);HIST=[...base,he];
+  const he={id:rec.id,skor,w:nowStr(),dur,jw:rec.jawaban,rf:false};addHist(he);HIST=[...base,he];
   LASTREC=rec;LR={A,pts,skor,dur,forced,why,ke,sk:"wait",stat:"⏳ Mengirim jawaban ke guru… jangan tutup halaman ini."};A=null;saveLR();
   const q0=ls("dk_pending");if(!q0.some(x=>x.id==rec.id)){q0.push(rec);ls("dk_pending",q0)}
   const kirim=kirimUlang();
-  try{hasil(LR)}catch(err){console.error(err);$("#app").innerHTML=`<div class="sb wait" id="st">${LR.stat}</div><div class="card hero"><h1>Skormu</h1><div class="ring" style="--s:${skor}"><b>${skor}</b></div><button class="btn w" onclick="home()">🏠 Kembali ke Beranda</button></div>`}
+  try{refleksi(LR)}catch(err){console.error(err);$("#app").innerHTML=`<div class="sb wait" id="st">${LR.stat}</div><div class="card hero"><h1>Skormu</h1><div class="ring" style="--s:${skor}"><b>${skor}</b></div><button class="btn w" onclick="home()">🏠 Kembali ke Beranda</button></div>`}
   sfx(forced?"no":"fan");
   await kirim;
   log(forced?"Asesmen dihentikan (pelanggaran)":"Selesai asesmen","Skor "+skor);
@@ -661,17 +663,43 @@ function hasil(r){
   const salah=Q.map((_,k)=>k).filter(k=>pts[k]<1);
   $("#app").innerHTML=head()+(forced?`<div class="alm" style="position:static;animation:none;border-radius:20px;margin:12px 0;padding:16px"><h2>🚫 Pengerjaan dihentikan</h2><p>Kamu melakukan pelanggaran ${MAXV} kali (${esc(why)}). Kamu tidak bisa melanjutkan pengerjaan. Skor dihitung dari soal yang sudah kamu jawab.</p></div>`:"")+
   `<div class="sb ${r.sk||"wait"}" id="st">${r.stat}</div><div class="card hero"><h1>${em} Skormu</h1><div class="ring" style="--s:${skor}"><b>${skor}</b></div><p class="bal" style="font-size:1.2rem">${forced?"Skor dari jawaban yang terkumpul":kat}</p><p>Penuh benar: ${pts.filter(p=>p==1).length}/${Q.length} soal • Waktu ${Math.floor(dur/60)} mnt ${dur%60} dtk</p></div>
-  ${histCard(r)}<div class="card"><h2>🎯 Umpan Balik & Tindak Lanjut</h2>${tp.map(t=>`<div class="tpb"><b>${t.n}</b> — ${t.sc}% • ${lab(t.sc)}<div class="prog"><i style="width:${t.sc}%"></i></div>${t.sc<80?`<button class="btn o" style="margin-top:6px" onclick="materi(${t.m[0]},${t.m[1]})">📖 Pelajari ulang: ${M[t.m[0]].t}</button>`:""}</div>`).join("")}
+  <div class="card">${histBanner(r)}</div><div class="card"><h2>🎯 Umpan Balik & Tindak Lanjut</h2>${tp.map(t=>`<div class="tpb"><b>${t.n}</b> — ${t.sc}% • ${lab(t.sc)}<div class="prog"><i style="width:${t.sc}%"></i></div>${t.sc<80?`<button class="btn o" style="margin-top:6px" onclick="materi(${t.m[0]},${t.m[1]})">📖 Pelajari ulang: ${M[t.m[0]].t}</button>`:""}</div>`).join("")}
   ${forced?"":salah.length?`<h3>Soal yang belum tepat (${salah.length})</h3>`+salah.map(k=>{const q=Q[k],m=META[k][1];return`<div class="fbk"><b>Soal ${k+1}</b> • ${META[k][0]}<br>${esc(q.q).slice(0,110)}${q.q.length>110?"…":""}<br><b>Jawabanmu:</b> ${ansTxt(q,r.A.ans[k])}<br><b>Seharusnya:</b> ${keyTxt(q)}<div class="ex">💡 ${q.w}</div><button class="btn o" onclick="materi(${m[0]},${m[1]})">📖 Pelajari ulang: ${M[m[0]].tabs[m[1]][1]}</button></div>`}).join("")+`<div class="ex">🧭 <b>Langkah selanjutnya:</b> baca ulang materi yang ditandai, kerjakan latihan “Coba Sendiri”, lalu tanyakan bagian yang belum paham kepada gurumu.</div>`:`<div class="gd">🌟 Semua soal tepat! Tantang dirimu dengan level lanjutan di <b>Pseudocode Lab</b>.</div>`}
   ${forced?`<div class="ex">🧭 Pelajari ulang topik yang berwarna oranye, lalu bicarakan dengan gurumu.</div>`:""}</div>`+
   (forced?"":`<div class="card"><h2>📚 Pembahasan Lengkap</h2><div class="chips"><span class="chip on" onclick="filt('',this)">Semua</span><span class="chip" onclick="filt('b',this)">✅ Benar</span><span class="chip" onclick="filt('sk',this)">⚠️ Perlu diperbaiki</span></div>
-  ${Q.map((q,k)=>{const p=pts[k],c=p==1?"b":p>0?"s":"k";return`<details class="pb ${c}" data-c="${c}"><summary>${k+1}. ${p==1?"✅":p>0?"🟡":"❌"} ${esc(q.q).slice(0,70)}${q.q.length>70?"…":""} <span class="pill">${Math.round(p*100)}%</span></summary><p><span class="pill">${ST[q.s].t}</span></p><p><b>Soal:</b> ${esc(q.q)}</p><p><b>Jawabanmu:</b><br>${ansTxt(q,r.A.ans[k])}</p><p><b>Kunci:</b><br>${keyTxt(q)}</p><div class="ex">💡 ${q.w}</div></details>`}).join("")}</div>
-  <div class="card"><h2>💭 Refleksi</h2>${REF.map((t,i)=>`<p><b>${t}</b></p><textarea rows="2" id="r${i}"></textarea>`).join("")}<button class="btn g" onclick="kirimRef()">Kirim Refleksi</button> <span id="rs"></span></div>`)+
-  `<button class="btn w" onclick="home()">🏠 Kembali ke Beranda</button>`;
+  ${Q.map((q,k)=>{const p=pts[k],c=p==1?"b":p>0?"s":"k";return`<details class="pb ${c}" data-c="${c}"><summary>${k+1}. ${p==1?"✅":p>0?"🟡":"❌"} ${esc(q.q).slice(0,70)}${q.q.length>70?"…":""} <span class="pill">${Math.round(p*100)}%</span></summary><p><span class="pill">${ST[q.s].t}</span></p><p><b>Soal:</b> ${esc(q.q)}</p><p><b>Jawabanmu:</b><br>${ansTxt(q,r.A.ans[k])}</p><p><b>Kunci:</b><br>${keyTxt(q)}</p><div class="ex">💡 ${q.w}</div></details>`}).join("")}</div>`)+
+  `<div class="bar"><button class="btn g" onclick="hasilTerakhir()">📊 Lihat Hasil Terakhir & Grafik</button> <button class="btn w" onclick="home()">🏠 Kembali ke Beranda</button></div>`;
   if(skor>=70&&!forced)for(let i=0;i<24;i++){const s=document.createElement("span");s.className="cf";s.textContent=["🎉","⭐","✨","🎊"][i%4];s.style.left=Math.random()*100+"vw";s.style.animationDelay=Math.random()*1.5+"s";document.body.appendChild(s);setTimeout(()=>s.remove(),5000)}
 }
 function filt(c,el){document.querySelectorAll(".chip").forEach(x=>x.classList.remove("on"));el.classList.add("on");document.querySelectorAll(".pb").forEach(d=>d.style.display=!c||c.includes(d.dataset.c)?"":"none")}
-function kirimRef(){const t=[0,1].map(i=>$("#r"+i).value.trim().slice(0,300)).join(" || ");log("Refleksi",t);$("#rs").textContent="✅ Refleksi terkirim"}
+let RFT=null;
+function refleksi(r){RFT=r;const ke=r.ke||1;
+  $("#app").innerHTML=head()+`<div class="sb ${r.sk||"wait"}" id="st">${r.stat}</div><div class="card hero"><h1>📝 Satu langkah lagi!</h1><p class="bal" style="font-size:1.15rem">Jawabanmu sudah dikumpulkan. Isi <b>refleksi</b> dulu untuk membuka <b>skormu</b>.</p></div>
+  <div class="card"><h2>💭 Refleksi ${ke==1?"Percobaan Pertama":"Percobaan ke-"+ke+" (latihan)"}</h2>${REF.map((t,i)=>`<p><b>${t}</b></p><textarea rows="3" id="r${i}" placeholder="Tulis jawabanmu di sini…"></textarea>`).join("")}<p id="rs" class="warn" style="display:none"></p><button class="btn g" style="width:100%" onclick="kirimRef()">✅ Kirim Refleksi & Lihat Skor</button></div>`;scrollTo(0,0)}
+function kirimRef(){
+  const v=[0,1].map(i=>$("#r"+i).value.trim());
+  if(v.some(x=>x.length<10)){const m=$("#rs");m.style.display="block";m.textContent="Isi kedua refleksi dulu ya (minimal 10 huruf di tiap kolom), lalu skormu akan terbuka.";return}
+  const r=RFT,ke=r.ke||1;log("Refleksi",`[P${ke}] ${v.map(x=>x.slice(0,300)).join(" || ")}`);
+  r.refl=true;markRf(ke);if(LR&&LR.ke==ke){LR.refl=true;saveLR()}
+  hasil(r);scrollTo(0,0)}
+function markRf(ke){const hs=HIST||getHist(),h=hs[ke-1];if(!h)return;h.rf=true;
+  try{const o=JSON.parse(localStorage.getItem("dk_h")||"{}"),a=o[hk()]||[];a.forEach(x=>{if(x.id==h.id)x.rf=true});o[hk()]=a;localStorage.setItem("dk_h",JSON.stringify(o))}catch(e){}}
+const jOf=h=>{try{return JSON.parse(h.jw)||{}}catch(e){return{}}};
+function recFrom(h,i){if(LR&&LR.ke==i+1&&LR.A)return LR;const j=jOf(h);return{A:{ans:j.a||[]},pts:j.p||[],skor:h.skor,dur:h.dur||0,forced:!!j.forced,why:j.why||"",ke:j.ke||i+1,sk:"ok",stat:"📂 Hasil tersimpan"}}
+function bukaHasil(i){const hs=HIST||getHist(),h=hs[i];if(!h||!h.jw)return alert("Detail percobaan ini belum tersedia di perangkat ini.");
+  const r=recFrom(h,i);if(!h.rf)refleksi(r);else{hasil(r);scrollTo(0,0)}}
+function hasilTerakhir(){
+  const hs=HIST||getHist();if(!hs.length)return home();
+  if(!hs[0].rf&&hs[0].jw)return bukaHasil(0);
+  const u=hs[0],main=jOf(u),lastI=hs.length-1;
+  const rows=hs.map((x,i)=>`<tr><td><b>ke-${i+1}</b></td><td>${i==0?"⭐ Nilai utama":"🔁 Latihan"}</td><td>${x.rf?"<b>"+x.skor+"</b>":"🔒"}</td><td>${x.dur!=null?Math.floor(x.dur/60)+"m "+x.dur%60+"d":"-"}</td><td><button class="btn ${x.rf?"w":"o"}" onclick="bukaHasil(${i})">${x.rf?"Lihat umpan balik & pembahasan":"📝 Isi refleksi untuk membuka"}</button></td></tr>`).join("");
+  $("#app").innerHTML=head()+`<div class="card hero"><h1>📊 Hasil Terakhir</h1><div class="ring" style="--s:${u.skor}"><b>${u.skor}</b></div><p class="bal" style="font-size:1.2rem">⭐ Nilai utamamu (percobaan pertama)</p></div>
+  <div class="card"><div class="ex">📌 <b>Ingat:</b> nilai yang diambil <b>hanya dari percobaan pertama</b>. Percobaan ke-2 dan seterusnya adalah <b>tempat latihan</b>: skornya tetap tercatat di sini, tetapi <b>tidak mengubah nilai utamamu</b>.</div></div>
+  <div class="card"><h2>📈 Grafik Pencapaian</h2><h3 class="sh">Skor tiap percobaan</h3>${barsV(hs.map((x,i)=>["ke-"+(i+1)+(i?" (latihan)":" ⭐"),x.skor,i?"#6aa0ff":undefined]),100)}
+  ${main.p?`<h3 class="sh">Pencapaian per topik — nilai utama (percobaan 1)</h3>${barsH(topPct([{j:main}]))}`:""}
+  ${lastI>0&&hs[lastI].rf&&jOf(hs[lastI]).p?`<h3 class="sh">Pencapaian per topik — percobaan ke-${lastI+1} (latihan terbaru)</h3>${barsH(topPct([{j:jOf(hs[lastI])}]))}`:""}</div>
+  <div class="card"><h2>🗂️ Hasil Setiap Percobaan</h2><div class="tbl"><table><tr><th>Percobaan</th><th>Jenis</th><th>Skor</th><th>Waktu</th><th></th></tr>${rows}</table></div></div>
+  <div class="bar"><button class="btn g" onclick="intro()">🔁 Berlatih lagi (tidak mengubah nilai)</button> <button class="btn w" onclick="home()">🏠 Kembali ke Beranda</button></div>`;scrollTo(0,0)}
 /* ===== LABORATORIUM PSEUDOCODE ===== */
 const LV=[
 {n:"Lurus ke Bintang",g:"Bawa robot ke ⭐ di ujung kanan.",req:["U"],reqT:"memakai ULANGI",start:[0,2,0],star:[4,2],walls:[]},
@@ -764,8 +792,8 @@ function buildD(){
   return{att,stu:Object.values(S).sort((a,b)=>a.kelas.localeCompare(b.kelas)||a.nama.localeCompare(b.nama))}
 }
 function viewNilai(attK){
-  const rows=[...attK].reverse().map(a=>`<tr><td>${esc(a.r[0])}</td><td>${esc(a.nama)}</td><td>${a.ke==1?"⭐ 1 (utama)":"🔁 "+a.ke+" (ulang)"}</td><td><b>${esc(a.r[3])}</b></td><td>${Math.floor(a.r[4]/60)}m ${a.r[4]%60}d</td><td>${a.j.out||0}×</td><td>${a.j.forced?"⛔ Dihentikan":"✅ Selesai"}</td><td style="white-space:nowrap"><button class="btn w" onclick="lihat(${a.gi})">Lihat jawaban</button> <button class="btn r" onclick="hapusPercobaan(${a.gi})">🗑️</button></td></tr>`).join("");
-  return `<p class="note">Hanya skor <b>Asesmen Sumatif</b>. Latihan materi dan Lab tidak ikut dihitung. Nilai utama = percobaan ke-1.</p><div class="tbl"><table><tr><th>Waktu</th><th>Nama</th><th>Percobaan</th><th>Skor</th><th>Durasi</th><th>Pelanggaran</th><th>Status</th><th></th></tr>${rows||"<tr><td colspan=8>Belum ada hasil.</td></tr>"}</table></div>`}
+  const rows=[...attK].reverse().map(a=>`<tr><td>${esc(a.r[0])}</td><td>${esc(a.nama)}</td><td>${a.ke==1?"⭐ 1 (utama)":"🔁 "+a.ke+" (latihan)"}</td><td><b>${esc(a.r[3])}</b></td><td>${Math.floor(a.r[4]/60)}m ${a.r[4]%60}d</td><td>${a.j.out||0}×</td><td>${a.j.forced?"⛔ Dihentikan":"✅ Selesai"}</td><td style="white-space:nowrap"><button class="btn w" onclick="lihat(${a.gi})">Lihat jawaban</button> <button class="btn r" onclick="hapusPercobaan(${a.gi})">🗑️</button></td></tr>`).join("");
+  return `<p class="note">Hanya skor <b>Asesmen Sumatif</b>. Latihan materi dan Lab tidak ikut dihitung. Nilai utama = percobaan ke-1; percobaan berikutnya adalah latihan.</p><div class="tbl"><table><tr><th>Waktu</th><th>Nama</th><th>Percobaan</th><th>Skor</th><th>Durasi</th><th>Pelanggaran</th><th>Status</th><th></th></tr>${rows||"<tr><td colspan=8>Belum ada hasil.</td></tr>"}</table></div>`}
 function viewSiswa(stuK){
   const rows=stuK.map((s,i)=>`<tr><td>${esc(s.nama)}</td><td>${s.att.length?"<b>"+s.att[0].skor+"</b>":"-"}</td><td>${s.att.length}</td><td>${s.selesai.size}/3</td><td>${labPts(s)}</td><td>${s.out}×</td><td>${esc(s.last||"-")}</td><td style="white-space:nowrap"><button class="btn w" onclick="grafikSiswa(${i})">📈 Grafik</button> <button class="btn r" onclick="hapusSiswa(${i})">🗑️ Reset / Hapus</button></td></tr>`).join("");
   return `<div class="tbl"><table><tr><th>Nama</th><th>Nilai utama</th><th>Percobaan</th><th>Materi selesai</th><th>Poin Lab</th><th>Pelanggaran</th><th>Terakhir aktif</th><th></th></tr>${rows||"<tr><td colspan=8>Belum ada siswa.</td></tr>"}</table></div><p style="margin-top:12px"><button class="btn r" onclick="hapusKelas()">⚠️ Hapus semua data kelas ${G.kelas}</button></p>`}
@@ -821,7 +849,7 @@ async function hapusKelas(){const t=prompt(`PERINGATAN: semua nilai dan log kela
   if(t!=="HAPUS "+G.kelas)return alert("Dibatalkan.");const r=await hapusApi({scope:"kelas",kelas:G.kelas});if(r){alert(r.deleted+" baris data dihapus.");dash(1)}}
 function lihat(gi){
   const r=G.d.hasil[gi];let j;try{j=JSON.parse(r[5])}catch(e){return alert("Data rusak")}
-  const rf=G.d.logs.filter(x=>nk(x[1])==nk(r[1])&&x[2]==r[2]&&x[3]=="Refleksi").map(x=>esc(x[4]).replace(" || ","<br>")).join("<hr>")||"-";
+  const rf=G.d.logs.filter(x=>nk(x[1])==nk(r[1])&&x[2]==r[2]&&x[3]=="Refleksi"&&(!j.ke||x[4].startsWith("[P"+j.ke+"]")||!/^\[P\d+\]/.test(x[4]))).map(x=>esc(x[4]).replace(/^\[P\d+\] /,"").replace(" || ","<br>")).join("<hr>")||"-";
   const m=document.createElement("div");m.className="modal";m.onclick=e=>{if(e.target==m)m.remove()};
   m.innerHTML=`<div><div class="bar"><h3>${esc(r[1])} • ${esc(r[2])} • Skor ${esc(r[3])}${j.forced?" • ⛔ Dihentikan":""}</h3><button class="btn r" onclick="this.closest('.modal').remove()">Tutup</button></div>
   ${Q.map((q,k)=>{const p=j.p[k];return`<div class="card" style="box-shadow:none;border:3px solid ${p==1?"#12b886":p>0?"#ffc61a":"#ff4d6d"}"><b>${k+1}. ${esc(q.q)}</b><br><small>Jawaban siswa:</small><br>${ansTxt(q,j.a[k])}<br><small>Kunci:</small><br>${keyTxt(q)}<br><small>Nilai soal: ${Math.round(p*100)}%</small></div>`}).join("")}
@@ -831,11 +859,11 @@ function lihat(gi){
 
 function grafikSiswa(i){const s=G.stu[i];if(!s)return;G.tab='grafik';G.scope='anak';G.sel=s.k;dash()}
 function csv(){
-  const q=s=>'"'+String(s).replace(/"/g,'""')+'"',cnt={},rows=[["Waktu","Nama","Kelas","Skor","Durasi(detik)","Percobaan","Jenis"],...G.d.hasil.map(r=>{const k=nk(r[1])+"|"+r[2];cnt[k]=(cnt[k]||0)+1;return[...r.slice(0,5),cnt[k],cnt[k]==1?"Nilai utama":"Percobaan ulang"]})];
+  const q=s=>'"'+String(s).replace(/"/g,'""')+'"',cnt={},rows=[["Waktu","Nama","Kelas","Skor","Durasi(detik)","Percobaan","Jenis"],...G.d.hasil.map(r=>{const k=nk(r[1])+"|"+r[2];cnt[k]=(cnt[k]||0)+1;return[...r.slice(0,5),cnt[k],cnt[k]==1?"Nilai utama":"Latihan (tidak dinilai)"]})];
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+rows.map(r=>r.map(q).join(",")).join("\n")],{type:"text/csv"}));a.download="nilai_koding_kelas7.csv";a.click();
 }
 
 /* ===== MULAI ===== */
 flushPending();flushLogs();
-if(U&&U.role=="guru")dash();else if(U){refreshHist();home()}else login();
+if(U&&U.role=="guru")dash();else if(U){home();refreshHist().then(()=>{if($("#peta"))home()})}else login();
 </script></body></html>
